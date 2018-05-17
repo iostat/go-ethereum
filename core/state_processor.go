@@ -92,9 +92,20 @@ func ApplyTransaction(config *params.ChainConfig, bc *BlockChain, author *common
 	}
 	// Create a new context to be used in the EVM environment
 	context := NewEVMContext(msg, header, bc, author)
+
+	// Create a new vmCfg based on the current configured one that adds a
+	// StateTransitionLogger to enable extended tx execution tracing.
+	vmLogConfig := &vm.LogConfig{
+		Debug: true,
+	}
+	transitionLogger := vm.NewStateTransitionLogger(vmLogConfig)
+	newVMCfg := cfg
+	newVMCfg.Debug = true
+	newVMCfg.Tracer = transitionLogger
+
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
-	vmenv := vm.NewEVM(context, statedb, config, cfg)
+	vmenv := vm.NewEVM(context, statedb, config, newVMCfg)
 	// Apply the transaction to the current state (included in the env)
 	res, gas, failed, err := ApplyMessage(vmenv, msg, gp)
 	if err != nil {
@@ -122,6 +133,7 @@ func ApplyTransaction(config *params.ChainConfig, bc *BlockChain, author *common
 	receipt.Logs = statedb.GetLogs(tx.Hash())
 	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 	receipt.Return = res
+	receipt.StorageChanges = types.VMStorageChanges(transitionLogger.GetCapturedStorageChanges())
 
 	return receipt, gas, err
 }

@@ -42,6 +42,61 @@ const (
 	ReceiptStatusSuccessful = uint(1)
 )
 
+// VMStorageChanges is a map
+type VMStorageChanges map[common.Address](map[common.Hash]common.Hash)
+
+type rlpVMStorageEntry struct {
+	StorageAddress common.Hash
+	StorageValue   common.Hash
+}
+
+type rlpVMStorageEntries []rlpVMStorageEntry
+
+type rlpVMStorageChange struct {
+	ContractAddress common.Address
+	StorageChanges  rlpVMStorageEntries
+}
+
+type rlpVMStorageChanges []rlpVMStorageChange
+
+// EncodeRLP allows VMStorageChanges to be RLP encoded and stored
+func (vsc *VMStorageChanges) EncodeRLP(w io.Writer) error {
+	var changes rlpVMStorageChanges
+
+	for vK, vV := range *vsc {
+		var entries rlpVMStorageEntries
+		for eK, eV := range vV {
+			entries = append(entries, rlpVMStorageEntry{StorageAddress: eK, StorageValue: eV})
+		}
+		changes = append(changes, rlpVMStorageChange{ContractAddress: vK, StorageChanges: entries})
+	}
+
+	return rlp.Encode(w, &changes)
+}
+
+// DecodeRLP allows VMStorageChanges to be RLP decoded and unstored
+func (vsc *VMStorageChanges) DecodeRLP(s *rlp.Stream) error {
+	var changes rlpVMStorageChanges
+	if err := s.Decode(&changes); err != nil {
+		return err
+	}
+
+	// init our map, just in case
+	if *vsc == nil {
+		*vsc = make(map[common.Address](map[common.Hash]common.Hash))
+	}
+
+	for _, change := range changes {
+		storageChangeMap := make(map[common.Hash]common.Hash)
+		for _, storageChange := range change.StorageChanges {
+			storageChangeMap[storageChange.StorageAddress] = storageChange.StorageValue
+		}
+		(*vsc)[change.ContractAddress] = storageChangeMap
+	}
+
+	return nil
+}
+
 // Receipt represents the results of a transaction.
 type Receipt struct {
 	// Consensus fields
@@ -57,7 +112,8 @@ type Receipt struct {
 	GasUsed         uint64         `json:"gasUsed" gencodec:"required"`
 
 	// extra fields
-	Return []byte `json:"return"`
+	Return         []byte           `json:"return"`
+	StorageChanges VMStorageChanges `json:"storageChanges"`
 }
 
 type receiptMarshaling struct {
@@ -84,6 +140,7 @@ type receiptStorageRLP struct {
 	Logs              []*LogForStorage
 	GasUsed           uint64
 	Return            []byte
+	StorageChanges    VMStorageChanges
 }
 
 // NewReceipt creates a barebone transaction receipt, copying the init fields.
@@ -169,6 +226,7 @@ func (r *ReceiptForStorage) EncodeRLP(w io.Writer) error {
 		Logs:              make([]*LogForStorage, len(r.Logs)),
 		GasUsed:           r.GasUsed,
 		Return:            r.Return,
+		StorageChanges:    r.StorageChanges,
 	}
 	for i, log := range r.Logs {
 		enc.Logs[i] = (*LogForStorage)(log)
@@ -193,7 +251,7 @@ func (r *ReceiptForStorage) DecodeRLP(s *rlp.Stream) error {
 		r.Logs[i] = (*Log)(log)
 	}
 	// Assign the implementation fields
-	r.TxHash, r.ContractAddress, r.GasUsed, r.Return = dec.TxHash, dec.ContractAddress, dec.GasUsed, dec.Return
+	r.TxHash, r.ContractAddress, r.GasUsed, r.Return, r.StorageChanges = dec.TxHash, dec.ContractAddress, dec.GasUsed, dec.Return, dec.StorageChanges
 	return nil
 }
 
