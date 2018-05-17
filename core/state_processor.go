@@ -96,7 +96,9 @@ func ApplyTransaction(config *params.ChainConfig, bc *BlockChain, author *common
 	// Create a new vmCfg based on the current configured one that adds a
 	// StateTransitionLogger to enable extended tx execution tracing.
 	vmLogConfig := &vm.LogConfig{
-		Debug: true,
+		DisableMemory: true,
+		DisableStack:  true,
+		//	Debug: true,
 	}
 	transitionLogger := vm.NewStateTransitionLogger(vmLogConfig)
 	newVMCfg := cfg
