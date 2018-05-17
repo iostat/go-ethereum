@@ -1066,7 +1066,7 @@ func (s *PublicTransactionPoolAPI) GetTransactionReceipt(ctx context.Context, ha
 		"contractAddress":   nil,
 		"logs":              receipt.Logs,
 		"logsBloom":         receipt.Bloom,
-		"return":            receipt.Return,
+		"return":            hexutil.Bytes(receipt.Return),
 		"storageChanges":    receipt.StorageChanges,
 	}
 
